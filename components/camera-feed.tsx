@@ -9,7 +9,8 @@ import type {
   PersonDetectionBox,
   FaceEmotionDetection,
   FireDetectionBox,
-} from "@/types/camera" // Added FireDetectionBox
+  MaskDetectionBox, // Added
+} from "@/types/camera"
 import { MODEL_DISPLAY_NAMES, AVAILABLE_MODELS } from "@/types/camera"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -29,6 +30,7 @@ import {
   AlertTriangle,
   Eraser,
   Flame,
+  ShieldAlert,
 } from "lucide-react"
 
 interface CameraFeedProps {
@@ -163,6 +165,20 @@ export function CameraFeed({
         ctx.fillText(`Fire ${fire.confidence.toFixed(2)}`, x1 * scaleX, y1 * scaleY - 5)
       })
     }
+
+    // New: Draw Mask Detections
+    if (camera.lastAnalysis?.modelUsed === "mask_detection") {
+      camera.lastAnalysis.maskDetections?.forEach((mask: MaskDetectionBox) => {
+        const [x1, y1, x2, y2] = mask.box
+        const label = mask.label.toLowerCase()
+        // Determine color based on label (e.g., "mask" vs "no_mask")
+        ctx.strokeStyle = label === "mask" || label === "masked" ? "green" : "orange"
+        ctx.fillStyle = label === "mask" || label === "masked" ? "green" : "orange"
+
+        ctx.strokeRect(x1 * scaleX, y1 * scaleY, (x2 - x1) * scaleX, (y2 - y1) * scaleY)
+        ctx.fillText(`${mask.label} ${mask.confidence.toFixed(2)}`, x1 * scaleX, y1 * scaleY - 5)
+      })
+    }
   }, [camera.lastAnalysis, camera.isActive, camera.modelType, currentPolygonPoints, drawPolygon, isDrawingArea])
 
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -199,6 +215,13 @@ export function CameraFeed({
   const hasFireDetections =
     camera.lastAnalysis?.modelUsed === "fire_detection" && (camera.lastAnalysis.fireDetections?.length || 0) > 0
 
+  const hasNoMaskDetections =
+    camera.lastAnalysis?.modelUsed === "mask_detection" &&
+    (camera.lastAnalysis.maskDetections?.some(
+      (det) => det.label.toLowerCase() === "no_mask" || det.label.toLowerCase() === "unmasked",
+    ) ||
+      false)
+
   return (
     <Card className="w-full flex flex-col shadow-md bg-white dark:bg-slate-800 overflow-hidden">
       <CardHeader className="pb-2">
@@ -210,6 +233,14 @@ export function CameraFeed({
             {hasFireDetections && (
               <Badge variant="destructive" className="flex items-center gap-1">
                 <Flame className="h-3 w-3" /> FIRE DETECTED
+              </Badge>
+            )}
+            {hasNoMaskDetections && (
+              <Badge
+                variant="destructive"
+                className="flex items-center gap-1 bg-orange-500 hover:bg-orange-600 text-white"
+              >
+                <ShieldAlert className="h-3 w-3" /> NO MASK
               </Badge>
             )}
             <Badge variant={camera.isActive ? "default" : "secondary"}>{camera.isActive ? "Active" : "Inactive"}</Badge>

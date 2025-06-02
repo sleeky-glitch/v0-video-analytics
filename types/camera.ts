@@ -1,7 +1,10 @@
 // Available analysis models
-export type AnalysisModelType = "person_detection" | "emotion_detection" | "person_detection_in_area" | "fire_detection" // New model type
-// | "person_count"
-// | "queue_length_estimation"
+export type AnalysisModelType =
+  | "person_detection"
+  | "emotion_detection"
+  | "person_detection_in_area"
+  | "fire_detection"
+  | "mask_detection" // New model type
 
 export interface Point {
   x: number
@@ -23,11 +26,19 @@ export interface FaceEmotionDetection {
   score: number
 }
 
-// New type for fire detection results
 export interface FireDetectionBox {
   box: [number, number, number, number] // [x1, y1, x2, y2]
   confidence: number
-  class_id: number // As per backend
+  class_id: number
+  label?: string // Backend sends label
+}
+
+// New type for mask detection results
+export interface MaskDetectionBox {
+  box: [number, number, number, number] // [x1, y1, x2, y2]
+  confidence: number
+  class_id: number
+  label: string // e.g., "mask", "no_mask"
 }
 
 export interface FrameAnalysisResult {
@@ -38,8 +49,8 @@ export interface FrameAnalysisResult {
   personInDesignatedArea?: boolean
 
   faceEmotions?: FaceEmotionDetection[]
-
-  fireDetections?: FireDetectionBox[] // New field
+  fireDetections?: FireDetectionBox[]
+  maskDetections?: MaskDetectionBox[] // New field
 
   error?: string
   frameWidth?: number
@@ -61,16 +72,14 @@ export const MODEL_DISPLAY_NAMES: Record<AnalysisModelType, string> = {
   person_detection: "Person Detection",
   emotion_detection: "Emotion Detection",
   person_detection_in_area: "Person Detection in Area",
-  fire_detection: "Fire Detection", // New display name
-  // person_count: "Person Count (Coming Soon)",
-  // queue_length_estimation: "Queue Length (Coming Soon)",
+  fire_detection: "Fire Detection",
+  mask_detection: "Mask Detection", // New display name
 }
 
 export const AVAILABLE_MODELS: AnalysisModelType[] = [
   "person_detection",
   "emotion_detection",
   "person_detection_in_area",
-  "fire_detection", // New available model
-  // "person_count",
-  // "queue_length_estimation",
+  "fire_detection",
+  "mask_detection", // New available model
 ]

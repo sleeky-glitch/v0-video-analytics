@@ -67,11 +67,17 @@ export function useCamera() {
         formData.append("image", blob)
 
         let apiUrl = "https://192.168.100.131:5000/detect" // Default API
+        let useDefaultFormData = true
 
         if (camera.modelType === "fire_detection") {
           apiUrl = "https://192.168.100.131:5000/detect_fire"
-          // No model_type or designated_area needed for this specific endpoint
-        } else {
+          useDefaultFormData = false
+        } else if (camera.modelType === "mask_detection") {
+          apiUrl = "https://192.168.100.131:5000/detect_mask"
+          useDefaultFormData = false
+        }
+
+        if (useDefaultFormData) {
           formData.append("model_type", camera.modelType)
           if (camera.modelType === "person_detection_in_area") {
             const points = camera.designatedArea?.points || []
@@ -104,7 +110,9 @@ export function useCamera() {
           } else if (result.modelUsed === "emotion_detection") {
             analysisData.faceEmotions = result.faceEmotions
           } else if (result.modelUsed === "fire_detection") {
-            analysisData.fireDetections = result.detections // Fire API returns 'detections' field
+            analysisData.fireDetections = result.detections
+          } else if (result.modelUsed === "mask_detection") {
+            analysisData.maskDetections = result.detections // Mask API returns 'detections' field
           }
 
           setCameraAnalysisResult(cameraId, analysisData)
@@ -177,8 +185,13 @@ export function useCamera() {
             } else if (newConfig.modelType === "person_detection_in_area" && !updatedCam.designatedArea) {
               updatedCam.designatedArea = { points: [] } // Init area if switching to it
             }
-            // If model changes from/to fire_detection, also clear designatedArea
-            if (newConfig.modelType === "fire_detection" || cam.modelType === "fire_detection") {
+            // If model changes from/to fire_detection or mask_detection, also clear designatedArea
+            if (
+              newConfig.modelType === "fire_detection" ||
+              cam.modelType === "fire_detection" ||
+              newConfig.modelType === "mask_detection" ||
+              cam.modelType === "mask_detection"
+            ) {
               updatedCam.designatedArea = undefined
             }
             return updatedCam

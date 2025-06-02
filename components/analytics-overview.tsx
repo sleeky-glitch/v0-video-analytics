@@ -4,7 +4,7 @@ import type React from "react"
 
 import type { Camera } from "@/types/camera"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { CameraIcon as LucideCameraIcon, AlertTriangle, Flame, Eye } from "lucide-react"
+import { CameraIcon as LucideCameraIcon, AlertTriangle, Flame, Eye, ShieldCheck } from "lucide-react"
 
 interface AnalyticsOverviewProps {
   cameras: Camera[]
@@ -63,8 +63,27 @@ export function AnalyticsOverview({ cameras }: AnalyticsOverviewProps) {
     }
   })
 
+  let personsWithMask = 0
+  let personsWithoutMask = 0
+  let maskDetectionCamerasActive = 0
+
+  cameras.forEach((camera) => {
+    if (camera.isActive && camera.modelType === "mask_detection") {
+      maskDetectionCamerasActive++
+    }
+    if (camera.isActive && camera.lastAnalysis?.modelUsed === "mask_detection") {
+      camera.lastAnalysis.maskDetections?.forEach((det) => {
+        if (det.label.toLowerCase() === "mask" || det.label.toLowerCase() === "masked") {
+          personsWithMask++
+        } else if (det.label.toLowerCase() === "no_mask" || det.label.toLowerCase() === "unmasked") {
+          personsWithoutMask++
+        }
+      })
+    }
+  })
+
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-3">
       <StatCard
         title="Total Cameras"
         value={cameras.length}
@@ -85,6 +104,20 @@ export function AnalyticsOverview({ cameras }: AnalyticsOverviewProps) {
         icon={AlertTriangle}
         details="Persons in designated areas"
         valueColor={personsInDesignatedAreas > 0 ? "text-orange-500 dark:text-orange-400" : undefined}
+      />
+      <StatCard
+        title="Masks Detected"
+        value={personsWithMask}
+        icon={ShieldCheck} // Or Users with a mask icon if available
+        details={`${maskDetectionCamerasActive} mask cameras active`}
+        valueColor={personsWithMask > 0 ? "text-green-500 dark:text-green-400" : undefined}
+      />
+      <StatCard
+        title="No Masks Detected"
+        value={personsWithoutMask}
+        icon={AlertTriangle} // Or ShieldAlert
+        details="Persons detected without masks"
+        valueColor={personsWithoutMask > 0 ? "text-orange-500 dark:text-orange-400" : undefined}
       />
     </div>
   )
