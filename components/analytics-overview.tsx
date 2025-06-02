@@ -2,7 +2,7 @@
 
 import type { Camera } from "@/types/camera"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Activity, CameraIcon as LucideCameraIcon, AlertTriangle, CheckCircle } from "lucide-react"
+import { Activity, CameraIcon as LucideCameraIcon, AlertTriangle, CheckCircle, Users } from "lucide-react"
 
 interface AnalyticsOverviewProps {
   cameras: Camera[]
@@ -11,30 +11,30 @@ interface AnalyticsOverviewProps {
 export function AnalyticsOverview({ cameras }: AnalyticsOverviewProps) {
   const activeCameras = cameras.filter((camera) => camera.isActive)
 
-  let totalPersonsDetected = 0
-  let totalFacesDetected = 0 // From sentiment model
+  let totalPersonsBoxes = 0 // From person_detection models
+  let totalFaceEmotionDetections = 0 // From emotion_detection model
   const emotionCounts: Record<string, number> = {}
   let errorsReported = 0
   let personsInDesignatedAreas = 0
 
   cameras.forEach((camera) => {
     if (camera.lastAnalysis) {
-      if (camera.lastAnalysis.error) {
-        errorsReported++
+      if (camera.lastAnalysis.error) errorsReported++
+
+      if (
+        camera.lastAnalysis.modelUsed === "person_detection" ||
+        camera.lastAnalysis.modelUsed === "person_detection_in_area"
+      ) {
+        totalPersonsBoxes += camera.lastAnalysis.detections?.length || 0
       }
-      // For sentiment/emotion model or if detections are generally available
-      if (camera.lastAnalysis.detections) {
-        totalPersonsDetected += camera.lastAnalysis.detections.length
-        camera.lastAnalysis.detections.forEach((person) => {
-          totalFacesDetected += person.faces.length
-          person.faces.forEach((face) => {
-            emotionCounts[face.emotion] = (emotionCounts[face.emotion] || 0) + 1
-          })
-        })
-      }
-      // For person in designated area model
       if (camera.lastAnalysis.modelUsed === "person_detection_in_area" && camera.lastAnalysis.personInDesignatedArea) {
         personsInDesignatedAreas++
+      }
+      if (camera.lastAnalysis.modelUsed === "emotion_detection") {
+        totalFaceEmotionDetections += camera.lastAnalysis.faceEmotions?.length || 0
+        camera.lastAnalysis.faceEmotions?.forEach((face) => {
+          emotionCounts[face.emotion] = (emotionCounts[face.emotion] || 0) + 1
+        })
       }
     }
   })
@@ -68,29 +68,29 @@ export function AnalyticsOverview({ cameras }: AnalyticsOverviewProps) {
           <div className={`text-2xl font-bold ${personsInDesignatedAreas > 0 ? "text-red-500" : "text-green-500"}`}>
             {personsInDesignatedAreas}
           </div>
-          <p className="text-xs text-muted-foreground">Cameras with person in designated area</p>
+          <p className="text-xs text-muted-foreground">Alerts from active areas</p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Overall Emotion</CardTitle>
+          <CardTitle className="text-sm font-medium">Detected Emotions</CardTitle>
           <Activity className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold capitalize">{dominantOverallEmotion}</div>
-          <p className="text-xs text-muted-foreground">{totalFacesDetected} faces (from sentiment model)</p>
+          <p className="text-xs text-muted-foreground">{totalFaceEmotionDetections} faces analyzed (emotion model)</p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Analysis Errors</CardTitle>
-          <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-sm font-medium">Detected Persons</CardTitle>
+          <Users className="h-4 w-4 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <div className={`text-2xl font-bold ${errorsReported > 0 ? "text-red-500" : ""}`}>{errorsReported}</div>
-          <p className="text-xs text-muted-foreground">Errors in last analysis cycle</p>
+          <div className="text-2xl font-bold">{totalPersonsBoxes}</div>
+          <p className="text-xs text-muted-foreground">Total person boxes (person models)</p>
         </CardContent>
       </Card>
     </div>

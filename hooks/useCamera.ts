@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import type { Camera, FrameAnalysisResult } from "@/types/camera"
+import type { Camera, FrameAnalysisResult, AnalysisModelType } from "@/types/camera"
 
-const CONTINUOUS_ANALYSIS_INTERVAL = 1500 // ms, adjust as needed
+const CONTINUOUS_ANALYSIS_INTERVAL = 1500
 
 export function useCamera() {
   const [cameras, setCameras] = useState<Camera[]>([])
@@ -41,18 +41,12 @@ export function useCamera() {
         (!isContinuous && isAnalyzingSingleFrame[cameraId]) ||
         (isContinuous && isAnalyzingSingleFrame[cameraId])
       ) {
-        if (isContinuous && isAnalyzingSingleFrame[cameraId]) {
-          // Skip this tick if continuous and already analyzing
-        } else if (!videoElement || videoElement.videoWidth === 0) {
-          console.warn(`[Camera ${cameraId}] Video element not ready for capture.`)
-        }
         return
       }
 
-      if (!isContinuous) {
-        setIsAnalyzingSingleFrame((prev) => ({ ...prev, [cameraId]: true }))
-      } else {
-        if (isAnalyzingSingleFrame[cameraId]) return // Already processing a frame for continuous
+      if (!isContinuous) setIsAnalyzingSingleFrame((prev) => ({ ...prev, [cameraId]: true }))
+      else {
+        if (isAnalyzingSingleFrame[cameraId]) return
         setIsAnalyzingSingleFrame((prev) => ({ ...prev, [cameraId]: true }))
       }
 
@@ -64,60 +58,54 @@ export function useCamera() {
         canvas.width = frameWidth
         canvas.height = frameHeight
         const ctx = canvas.getContext("2d")
-
-        if (!ctx) throw new Error("Failed to get 2D context from canvas.")
-
+        if (!ctx) throw new Error("Failed to get 2D context.")
         ctx.drawImage(videoElement, 0, 0, frameWidth, frameHeight)
         const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8))
-
-        if (!blob) throw new Error("Failed to create blob from canvas.")
+        if (!blob) throw new Error("Failed to create blob.")
 
         const formData = new FormData()
         formData.append("image", blob)
         formData.append("model_type", camera.modelType)
 
         if (camera.modelType === "person_detection_in_area") {
-          // Always send designated_area if this model is selected.
-          // If no points, send an empty array.
           const points = camera.designatedArea?.points || []
           const pointsAsArrays = points.map((p) => [p.x, p.y])
           formData.append("designated_area", JSON.stringify(pointsAsArrays))
-          console.log("DEBUG: Sending designated_area as:", JSON.stringify(pointsAsArrays))
         }
 
         try {
           const apiUrl = "https://192.168.100.131:5000/detect"
-          console.log(
-            `[Camera ${cameraId}] Sending image to API. Model: ${camera.modelType}`,
-            camera.modelType === "person_detection_in_area"
-              ? `Area points: ${JSON.stringify(camera.designatedArea?.points?.map((p) => [p.x, p.y]))}`
-              : "",
-          )
-
           const response = await fetch(apiUrl, { method: "POST", body: formData })
 
-          console.log(`[Camera ${cameraId}] API Response Status: ${response.status} ${response.statusText}`)
           if (!response.ok) {
             const errorText = await response.text()
             throw new Error(`API request failed: ${response.status} ${errorText}`)
           }
+          const result = await response.json() // API now returns modelUsed
 
-          const result = await response.json()
-          console.log(`[Camera ${cameraId}] API Analysis Result:`, result)
-
-          setCameraAnalysisResult(cameraId, {
+          // Construct analysis result based on the model used (as reported by backend)
+          const analysisData: FrameAnalysisResult = {
             timestamp: Date.now(),
-            detections: result.detections,
-            personInDesignatedArea: result.personInDesignatedArea,
-            modelUsed: camera.modelType,
+            modelUsed: result.modelUsed as AnalysisModelType,
             frameWidth,
             frameHeight,
-          })
+          }
+
+          if (result.modelUsed === "person_detection" || result.modelUsed === "person_detection_in_area") {
+            analysisData.detections = result.detections
+            if (result.modelUsed === "person_detection_in_area") {
+              analysisData.personInDesignatedArea = result.personInDesignatedArea
+            }
+          } else if (result.modelUsed === "emotion_detection") {
+            analysisData.faceEmotions = result.faceEmotions
+          }
+
+          setCameraAnalysisResult(cameraId, analysisData)
         } catch (fetchError) {
           console.error(`[Camera ${cameraId}] Analysis fetch error:`, fetchError)
           setCameraAnalysisResult(cameraId, {
             timestamp: Date.now(),
-            error: (fetchError as Error).message || "Analysis API request failed",
+            error: (fetchError as Error).message,
             modelUsed: camera.modelType,
             frameWidth,
             frameHeight,
@@ -127,7 +115,7 @@ export function useCamera() {
         console.error(`[Camera ${cameraId}] Capture error:`, captureError)
         setCameraAnalysisResult(cameraId, {
           timestamp: Date.now(),
-          error: (captureError as Error).message || "Frame capture failed",
+          error: (captureError as Error).message,
           modelUsed: camera.modelType,
           frameWidth,
           frameHeight,
@@ -142,14 +130,10 @@ export function useCamera() {
   const startContinuousAnalysis = useCallback(
     (cameraId: string) => {
       const cam = cameras.find((c) => c.id === cameraId)
-      if (continuousAnalysisIntervals.current[cameraId] || !cam || !cam.isActive) {
-        return
-      }
+      if (continuousAnalysisIntervals.current[cameraId] || !cam || !cam.isActive) return
       setIsContinuouslyAnalyzing((prev) => ({ ...prev, [cameraId]: true }))
       captureAndAnalyze(cameraId, true)
-      const intervalId = setInterval(() => {
-        captureAndAnalyze(cameraId, true)
-      }, CONTINUOUS_ANALYSIS_INTERVAL)
+      const intervalId = setInterval(() => captureAndAnalyze(cameraId, true), CONTINUOUS_ANALYSIS_INTERVAL)
       continuousAnalysisIntervals.current[cameraId] = intervalId
     },
     [captureAndAnalyze, cameras],
@@ -181,11 +165,7 @@ export function useCamera() {
         prevCameras.map((cam) => {
           if (cam.id === cameraId) {
             const updatedCam = { ...cam, ...newConfig }
-            if (
-              newConfig.modelType &&
-              newConfig.modelType !== "person_detection_in_area" &&
-              updatedCam.modelType !== "person_detection_in_area"
-            ) {
+            if (newConfig.modelType && newConfig.modelType !== "person_detection_in_area") {
               updatedCam.designatedArea = undefined
             } else if (newConfig.modelType === "person_detection_in_area" && !updatedCam.designatedArea) {
               updatedCam.designatedArea = { points: [] }
@@ -195,9 +175,7 @@ export function useCamera() {
           return cam
         }),
       )
-      if (isContinuouslyAnalyzing[cameraId]) {
-        stopContinuousAnalysis(cameraId)
-      }
+      if (isContinuouslyAnalyzing[cameraId]) stopContinuousAnalysis(cameraId)
     },
     [isContinuouslyAnalyzing, stopContinuousAnalysis],
   )
@@ -205,8 +183,7 @@ export function useCamera() {
   const removeCamera = useCallback(
     (cameraId: string) => {
       stopContinuousAnalysis(cameraId)
-      const stream = streamRefs.current[cameraId]
-      stream?.getTracks().forEach((track) => track.stop())
+      streamRefs.current[cameraId]?.getTracks().forEach((track) => track.stop())
       delete streamRefs.current[cameraId]
       delete videoRefs.current[cameraId]
       setCameras((prev) => prev.filter((camera) => camera.id !== cameraId))

@@ -22,37 +22,28 @@ export default function VideoAnalyticsDashboard() {
     startContinuousAnalysis,
     stopContinuousAnalysis,
     setVideoRef,
-    updateCameraConfig, // Added this
+    updateCameraConfig,
   } = useCamera()
 
   const [isTogglingAllContinuous, setIsTogglingAllContinuous] = useState(false)
 
   const handleAnalyzeAllSingleFrame = () => {
     cameras.forEach((camera) => {
-      if (camera.isActive && !isContinuouslyAnalyzing[camera.id]) {
-        captureAndAnalyze(camera.id)
-      }
+      if (camera.isActive && !isContinuouslyAnalyzing[camera.id]) captureAndAnalyze(camera.id)
     })
   }
 
   const handleToggleAllContinuousAnalysis = () => {
     setIsTogglingAllContinuous(true)
     const activeCameras = cameras.filter((c) => c.isActive)
-    const anyCameraContinuouslyAnalyzing = activeCameras.some((c) => isContinuouslyAnalyzing[c.id])
-
-    if (anyCameraContinuouslyAnalyzing) {
-      activeCameras.forEach((camera) => {
-        if (isContinuouslyAnalyzing[camera.id]) {
-          stopContinuousAnalysis(camera.id)
-        }
-      })
-    } else {
-      activeCameras.forEach((camera) => {
-        if (!isContinuouslyAnalyzing[camera.id]) {
-          startContinuousAnalysis(camera.id)
-        }
-      })
-    }
+    const anyContAnalyzing = activeCameras.some((c) => isContinuouslyAnalyzing[c.id])
+    activeCameras.forEach((camera) => {
+      if (anyContAnalyzing) {
+        if (isContinuouslyAnalyzing[camera.id]) stopContinuousAnalysis(camera.id)
+      } else {
+        if (!isContinuouslyAnalyzing[camera.id]) startContinuousAnalysis(camera.id)
+      }
+    })
     setTimeout(() => setIsTogglingAllContinuous(false), 1000)
   }
 
@@ -78,18 +69,13 @@ export default function VideoAnalyticsDashboard() {
               }
               title="Analyze a single frame for all active cameras not in continuous mode"
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Analyze All Once
+              <RefreshCw className="h-4 w-4 mr-2" /> Analyze All Once
             </Button>
             <Button
               variant="outline"
               onClick={handleToggleAllContinuousAnalysis}
               disabled={activeCamerasCount === 0 || isTogglingAllContinuous}
-              title={
-                anyCameraIsContinuouslyAnalyzing
-                  ? "Stop continuous analysis for all active cameras"
-                  : "Start continuous analysis for all active cameras"
-              }
+              title={anyCameraIsContinuouslyAnalyzing ? "Stop all streams" : "Start all streams"}
             >
               {anyCameraIsContinuouslyAnalyzing ? (
                 <ZapOff className="h-4 w-4 mr-2" />
@@ -101,17 +87,13 @@ export default function VideoAnalyticsDashboard() {
             <AddCameraDialog onAddCamera={addCamera} />
           </div>
         </header>
-
         <AnalyticsOverview cameras={cameras} />
-
         {cameras.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
               <LucideCameraIcon className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-xl font-semibold">No cameras added yet</h3>
-              <p className="text-muted-foreground mb-6">
-                Add your first camera to start monitoring and analyzing video feeds.
-              </p>
+              <p className="text-muted-foreground mb-6">Add your first camera to start monitoring.</p>
               <AddCameraDialog onAddCamera={addCamera} />
             </CardContent>
           </Card>
@@ -130,7 +112,7 @@ export default function VideoAnalyticsDashboard() {
                 onStartContinuousAnalysis={() => startContinuousAnalysis(camera.id)}
                 onStopContinuousAnalysis={() => stopContinuousAnalysis(camera.id)}
                 onVideoRef={(element) => setVideoRef(camera.id, element)}
-                onUpdateCameraConfig={updateCameraConfig} // Pass the new handler
+                onUpdateCameraConfig={updateCameraConfig}
               />
             ))}
           </div>

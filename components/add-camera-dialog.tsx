@@ -55,9 +55,9 @@ export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-1">
-            <Label htmlFor="name">Camera Name</Label>
+            <Label htmlFor="name-add">Camera Name</Label>
             <Input
-              id="name"
+              id="name-add"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="E.g., Front Door Cam"
@@ -66,9 +66,9 @@ export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="type">Camera Type</Label>
+            <Label htmlFor="type-add">Camera Type</Label>
             <Select value={type} onValueChange={(value: "webcam" | "rtsp") => setType(value)}>
-              <SelectTrigger id="type">
+              <SelectTrigger id="type-add">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -80,9 +80,9 @@ export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
 
           {type === "rtsp" && (
             <div className="space-y-1">
-              <Label htmlFor="url">RTSP URL</Label>
+              <Label htmlFor="url-add">RTSP URL</Label>
               <Input
-                id="url"
+                id="url-add"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="rtsp://username:password@ip:port/stream"
@@ -92,18 +92,14 @@ export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
           )}
 
           <div className="space-y-1">
-            <Label htmlFor="modelType">Analysis Model</Label>
+            <Label htmlFor="modelType-add">Analysis Model</Label>
             <Select value={modelType} onValueChange={(value: AnalysisModelType) => setModelType(value)}>
-              <SelectTrigger id="modelType">
+              <SelectTrigger id="modelType-add">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {AVAILABLE_MODELS.map((model) => (
-                  <SelectItem
-                    key={model}
-                    value={model}
-                    disabled={model === "person_count" || model === "queue_length_estimation"}
-                  >
+                  <SelectItem key={model} value={model}>
                     {MODEL_DISPLAY_NAMES[model]}
                   </SelectItem>
                 ))}
