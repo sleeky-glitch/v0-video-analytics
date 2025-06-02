@@ -1,27 +1,53 @@
 "use client"
 
+import type React from "react"
+
 import type { Camera } from "@/types/camera"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Activity, CameraIcon as LucideCameraIcon, AlertTriangle, CheckCircle, Users, Flame } from "lucide-react" // Added Flame
+import { CameraIcon as LucideCameraIcon, AlertTriangle, Flame, Eye } from "lucide-react"
 
 interface AnalyticsOverviewProps {
   cameras: Camera[]
 }
 
+// A simpler StatCard component for this UI
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  details,
+  valueColor,
+}: {
+  title: string
+  value: string | number
+  icon: React.ElementType
+  details?: string
+  valueColor?: string
+}) {
+  return (
+    <Card className="shadow-md bg-white dark:bg-slate-800">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-slate-600 dark:text-slate-300">{title}</CardTitle>
+        <Icon className="h-5 w-5 text-slate-400 dark:text-slate-500" />
+      </CardHeader>
+      <CardContent>
+        <div className={`text-3xl font-bold ${valueColor || "text-slate-800 dark:text-slate-100"}`}>{value}</div>
+        {details && <p className="text-xs text-slate-500 dark:text-slate-400 pt-1">{details}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function AnalyticsOverview({ cameras }: AnalyticsOverviewProps) {
   const activeCameras = cameras.filter((camera) => camera.isActive)
-
   let totalPersonsBoxes = 0
-  let totalFaceEmotionDetections = 0
-  const emotionCounts: Record<string, number> = {}
-  let errorsReported = 0
   let personsInDesignatedAreas = 0
-  let fireAlerts = 0 // New counter for fire alerts
+  let fireAlertsCount = 0
+  let activeStreams = 0
 
   cameras.forEach((camera) => {
+    if (camera.isActive) activeStreams++
     if (camera.lastAnalysis) {
-      if (camera.lastAnalysis.error) errorsReported++
-
       if (
         camera.lastAnalysis.modelUsed === "person_detection" ||
         camera.lastAnalysis.modelUsed === "person_detection_in_area"
@@ -31,84 +57,35 @@ export function AnalyticsOverview({ cameras }: AnalyticsOverviewProps) {
       if (camera.lastAnalysis.modelUsed === "person_detection_in_area" && camera.lastAnalysis.personInDesignatedArea) {
         personsInDesignatedAreas++
       }
-      if (camera.lastAnalysis.modelUsed === "emotion_detection") {
-        totalFaceEmotionDetections += camera.lastAnalysis.faceEmotions?.length || 0
-        camera.lastAnalysis.faceEmotions?.forEach((face) => {
-          emotionCounts[face.emotion] = (emotionCounts[face.emotion] || 0) + 1
-        })
-      }
-      // New: Count fire alerts
       if (camera.lastAnalysis.modelUsed === "fire_detection" && (camera.lastAnalysis.fireDetections?.length || 0) > 0) {
-        fireAlerts++
+        fireAlertsCount++
       }
     }
   })
 
-  const dominantOverallEmotion =
-    Object.keys(emotionCounts).length > 0 ? Object.entries(emotionCounts).sort(([, a], [, b]) => b - a)[0][0] : "N/A"
-
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-      {" "}
-      {/* Adjusted grid for 5 cards */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Cameras</CardTitle>
-          <LucideCameraIcon className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{cameras.length}</div>
-          <p className="text-xs text-muted-foreground">{activeCameras.length} active</p>
-        </CardContent>
-      </Card>
-      <Card>
-        {" "}
-        {/* New Fire Alert Card */}
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Fire Alerts</CardTitle>
-          <Flame className={`h-4 w-4 ${fireAlerts > 0 ? "text-red-500 animate-pulse" : "text-muted-foreground"}`} />
-        </CardHeader>
-        <CardContent>
-          <div className={`text-2xl font-bold ${fireAlerts > 0 ? "text-red-500" : ""}`}>{fireAlerts}</div>
-          <p className="text-xs text-muted-foreground">Cameras detecting fire</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Persons in Area</CardTitle>
-          {personsInDesignatedAreas > 0 ? (
-            <AlertTriangle className="h-4 w-4 text-orange-500" /> // Changed color for distinction
-          ) : (
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className={`text-2xl font-bold ${personsInDesignatedAreas > 0 ? "text-orange-500" : "text-green-500"}`}>
-            {personsInDesignatedAreas}
-          </div>
-          <p className="text-xs text-muted-foreground">Area intrusion alerts</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Detected Persons</CardTitle>
-          <Users className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{totalPersonsBoxes}</div>
-          <p className="text-xs text-muted-foreground">Total person boxes</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Detected Emotions</CardTitle>
-          <Activity className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold capitalize">{dominantOverallEmotion}</div>
-          <p className="text-xs text-muted-foreground">{totalFaceEmotionDetections} faces analyzed</p>
-        </CardContent>
-      </Card>
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <StatCard
+        title="Total Cameras"
+        value={cameras.length}
+        icon={LucideCameraIcon}
+        details={`${activeCameras.length} active`}
+      />
+      <StatCard title="Active Streams" value={activeStreams} icon={Eye} details="Currently streaming video" />
+      <StatCard
+        title="Fire Alerts"
+        value={fireAlertsCount}
+        icon={Flame}
+        details="Active fire detections"
+        valueColor={fireAlertsCount > 0 ? "text-red-500 dark:text-red-400" : undefined}
+      />
+      <StatCard
+        title="Area Intrusions"
+        value={personsInDesignatedAreas}
+        icon={AlertTriangle}
+        details="Persons in designated areas"
+        valueColor={personsInDesignatedAreas > 0 ? "text-orange-500 dark:text-orange-400" : undefined}
+      />
     </div>
   )
 }

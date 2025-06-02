@@ -200,10 +200,10 @@ export function CameraFeed({
     camera.lastAnalysis?.modelUsed === "fire_detection" && (camera.lastAnalysis.fireDetections?.length || 0) > 0
 
   return (
-    <Card className="w-full flex flex-col">
+    <Card className="w-full flex flex-col shadow-md bg-white dark:bg-slate-800 overflow-hidden">
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base font-medium flex items-center gap-2">
+          <CardTitle className="text-base font-semibold flex items-center gap-2 text-slate-700 dark:text-slate-200">
             <LucideCameraIcon className="h-5 w-5" /> {camera.name}
           </CardTitle>
           <div className="flex items-center gap-2">
@@ -239,7 +239,10 @@ export function CameraFeed({
           )}
         </div>
         <div className="space-y-1">
-          <Label htmlFor={`model-select-${camera.id}`} className="text-xs">
+          <Label
+            htmlFor={`model-select-${camera.id}`}
+            className="text-xs font-medium text-slate-600 dark:text-slate-300"
+          >
             Analysis Model
           </Label>
           <Select value={camera.modelType} onValueChange={handleModelChange}>
@@ -257,7 +260,7 @@ export function CameraFeed({
         </div>
         {camera.modelType === "person_detection_in_area" && ( // Only show for this model
           <div className="space-y-2 pt-2 border-t">
-            <Label className="text-xs">Designated Area</Label>
+            <Label className="text-xs font-medium text-slate-600 dark:text-slate-300">Designated Area</Label>
             <div className="flex gap-2">
               <Button onClick={toggleDrawingArea} variant="outline" size="sm" className="flex-1">
                 <Edit3 className={`mr-2 h-4 w-4 ${isDrawingArea ? "text-destructive" : ""}`} />{" "}
@@ -320,9 +323,11 @@ export function CameraFeed({
             </Button>
           )}
         </div>
-        {camera.lastAnalysis?.error && <p className="text-xs text-red-500 pt-2">Error: {camera.lastAnalysis.error}</p>}
+        {camera.lastAnalysis?.error && (
+          <p className="text-xs text-red-600 dark:text-red-400 pt-2">Error: {camera.lastAnalysis.error}</p>
+        )}
         {camera.lastAnalysis && !camera.lastAnalysis.error && (
-          <p className="text-xs text-muted-foreground text-center pt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 text-center pt-1">
             Last analysis: {new Date(camera.lastAnalysis.timestamp).toLocaleTimeString()}
             {camera.lastAnalysis.modelUsed && ` (${MODEL_DISPLAY_NAMES[camera.lastAnalysis.modelUsed]})`}
           </p>

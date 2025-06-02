@@ -76,16 +76,6 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 212.7 26.8% 83.9%;
-
-    /* Dark theme sidebar variables */
-    --sidebar-border-color: theme("colors.slate.700");
-    --sidebar-background: theme("colors.brand-sidebar"); /* Use custom dark blue */
-    --sidebar-foreground: theme("colors.brand-sidebar-text");
-    --sidebar-muted-foreground: theme("colors.slate.400");
-    --sidebar-active-background: theme("colors.brand-sidebar-active");
-    --sidebar-active-foreground: theme("colors.brand-sidebar-text");
-    --sidebar-hover-background: theme("colors.slate.700"); /* Adjust hover for dark blue */
-    --sidebar-hover-foreground: theme("colors.brand-sidebar-text");
   }
 }
 
@@ -98,7 +88,7 @@
   }
   /* Ensure main content area gets the light gray background in both themes */
   .main-content-area {
-    @apply bg-brand-content-bg dark:bg-slate-900; /* Slightly darker for dark theme content */
+    @apply bg-slate-100 dark:bg-slate-900; /* Slightly darker for dark theme content */
   }
 }
 
