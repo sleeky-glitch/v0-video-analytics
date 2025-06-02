@@ -83,13 +83,13 @@ export function useCamera() {
                 formData.append("image", blob)
 
                 try {
-                  console.log(
-                    `[Camera ${cameraId}] Attempting to send image to API: http://192.168.100.131:5000/detect`,
-                  )
+                  const apiUrl = "https://192.168.100.131:5000/detect"
+                  console.log(`[Camera ${cameraId}] Attempting to send image to API: ${apiUrl}`)
+
                   // You can inspect the blob size or type if needed:
                   // console.log(`[Camera ${cameraId}] Image blob size: ${blob.size} bytes, type: ${blob.type}`);
 
-                  const response = await fetch("http://192.168.100.131:5000/detect", {
+                  const response = await fetch(apiUrl, {
                     method: "POST",
                     body: formData,
                     // It's good practice to set mode to 'cors' if you expect cross-origin requests,
