@@ -1,5 +1,9 @@
 "use client"
 
+// No changes needed here if AVAILABLE_MODELS and MODEL_DISPLAY_NAMES in types/camera.ts
+// are correctly updated, as this component already iterates over them.
+// Just ensure those constants in types/camera.ts include "fire_detection".
+
 import type React from "react"
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
@@ -33,7 +37,6 @@ export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
       modelType,
     })
 
-    // Reset form
     setName("")
     setUrl("")
     setType("webcam")
@@ -55,20 +58,20 @@ export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-1">
-            <Label htmlFor="name-add">Camera Name</Label>
+            <Label htmlFor="name-add-fire">Camera Name</Label>
             <Input
-              id="name-add"
+              id="name-add-fire"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="E.g., Front Door Cam"
+              placeholder="E.g., Kitchen Cam"
               required
             />
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="type-add">Camera Type</Label>
+            <Label htmlFor="type-add-fire">Camera Type</Label>
             <Select value={type} onValueChange={(value: "webcam" | "rtsp") => setType(value)}>
-              <SelectTrigger id="type-add">
+              <SelectTrigger id="type-add-fire">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -80,9 +83,9 @@ export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
 
           {type === "rtsp" && (
             <div className="space-y-1">
-              <Label htmlFor="url-add">RTSP URL</Label>
+              <Label htmlFor="url-add-fire">RTSP URL</Label>
               <Input
-                id="url-add"
+                id="url-add-fire"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="rtsp://username:password@ip:port/stream"
@@ -92,9 +95,9 @@ export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
           )}
 
           <div className="space-y-1">
-            <Label htmlFor="modelType-add">Analysis Model</Label>
+            <Label htmlFor="modelType-add-fire">Analysis Model</Label>
             <Select value={modelType} onValueChange={(value: AnalysisModelType) => setModelType(value)}>
-              <SelectTrigger id="modelType-add">
+              <SelectTrigger id="modelType-add-fire">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

@@ -65,28 +65,33 @@ export function useCamera() {
 
         const formData = new FormData()
         formData.append("image", blob)
-        formData.append("model_type", camera.modelType)
 
-        if (camera.modelType === "person_detection_in_area") {
-          const points = camera.designatedArea?.points || []
-          const pointsAsArrays = points.map((p) => [p.x, p.y])
-          formData.append("designated_area", JSON.stringify(pointsAsArrays))
+        let apiUrl = "https://192.168.100.131:5000/detect" // Default API
+
+        if (camera.modelType === "fire_detection") {
+          apiUrl = "https://192.168.100.131:5000/detect_fire"
+          // No model_type or designated_area needed for this specific endpoint
+        } else {
+          formData.append("model_type", camera.modelType)
+          if (camera.modelType === "person_detection_in_area") {
+            const points = camera.designatedArea?.points || []
+            const pointsAsArrays = points.map((p) => [p.x, p.y])
+            formData.append("designated_area", JSON.stringify(pointsAsArrays))
+          }
         }
 
         try {
-          const apiUrl = "https://192.168.100.131:5000/detect"
           const response = await fetch(apiUrl, { method: "POST", body: formData })
 
           if (!response.ok) {
             const errorText = await response.text()
             throw new Error(`API request failed: ${response.status} ${errorText}`)
           }
-          const result = await response.json() // API now returns modelUsed
+          const result = await response.json()
 
-          // Construct analysis result based on the model used (as reported by backend)
           const analysisData: FrameAnalysisResult = {
             timestamp: Date.now(),
-            modelUsed: result.modelUsed as AnalysisModelType,
+            modelUsed: result.modelUsed as AnalysisModelType, // Backend now sends this
             frameWidth,
             frameHeight,
           }
@@ -98,6 +103,8 @@ export function useCamera() {
             }
           } else if (result.modelUsed === "emotion_detection") {
             analysisData.faceEmotions = result.faceEmotions
+          } else if (result.modelUsed === "fire_detection") {
+            analysisData.fireDetections = result.detections // Fire API returns 'detections' field
           }
 
           setCameraAnalysisResult(cameraId, analysisData)
@@ -166,9 +173,13 @@ export function useCamera() {
           if (cam.id === cameraId) {
             const updatedCam = { ...cam, ...newConfig }
             if (newConfig.modelType && newConfig.modelType !== "person_detection_in_area") {
-              updatedCam.designatedArea = undefined
+              updatedCam.designatedArea = undefined // Clear area if not area detection model
             } else if (newConfig.modelType === "person_detection_in_area" && !updatedCam.designatedArea) {
-              updatedCam.designatedArea = { points: [] }
+              updatedCam.designatedArea = { points: [] } // Init area if switching to it
+            }
+            // If model changes from/to fire_detection, also clear designatedArea
+            if (newConfig.modelType === "fire_detection" || cam.modelType === "fire_detection") {
+              updatedCam.designatedArea = undefined
             }
             return updatedCam
           }

@@ -2,7 +2,14 @@
 
 import type React from "react"
 import { useEffect, useRef, useState, useCallback } from "react"
-import type { Camera, Point, AnalysisModelType, PersonDetectionBox, FaceEmotionDetection } from "@/types/camera"
+import type {
+  Camera,
+  Point,
+  AnalysisModelType,
+  PersonDetectionBox,
+  FaceEmotionDetection,
+  FireDetectionBox,
+} from "@/types/camera" // Added FireDetectionBox
 import { MODEL_DISPLAY_NAMES, AVAILABLE_MODELS } from "@/types/camera"
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -21,6 +28,7 @@ import {
   CheckCircle,
   AlertTriangle,
   Eraser,
+  Flame,
 } from "lucide-react"
 
 interface CameraFeedProps {
@@ -115,7 +123,6 @@ export function CameraFeed({
     const scaleX = displayWidth > 0 && nativeWidth > 0 ? displayWidth / nativeWidth : 1
     const scaleY = displayHeight > 0 && nativeHeight > 0 ? displayHeight / nativeHeight : 1
 
-    // Draw designated area
     if (camera.modelType === "person_detection_in_area" && currentPolygonPoints.length > 0) {
       drawPolygon(ctx, currentPolygonPoints, displayWidth, displayHeight, "yellow")
     }
@@ -123,7 +130,6 @@ export function CameraFeed({
     ctx.lineWidth = 2
     ctx.font = "12px Arial"
 
-    // Draw Person Detections (for person_detection and person_detection_in_area)
     if (
       camera.lastAnalysis?.modelUsed === "person_detection" ||
       camera.lastAnalysis?.modelUsed === "person_detection_in_area"
@@ -137,14 +143,24 @@ export function CameraFeed({
       })
     }
 
-    // Draw Face Emotion Detections (for emotion_detection)
     if (camera.lastAnalysis?.modelUsed === "emotion_detection") {
       camera.lastAnalysis.faceEmotions?.forEach((face: FaceEmotionDetection) => {
-        const [fx, fy, fw, fh] = face.box // These are absolute from backend
-        ctx.strokeStyle = "cyan" // Changed color for distinction
+        const [fx, fy, fw, fh] = face.box
+        ctx.strokeStyle = "cyan"
         ctx.strokeRect(fx * scaleX, fy * scaleY, fw * scaleX, fh * scaleY)
         ctx.fillStyle = "cyan"
         ctx.fillText(`${face.emotion.substring(0, 3)} ${face.score.toFixed(2)}`, fx * scaleX, fy * scaleY - 5)
+      })
+    }
+
+    // New: Draw Fire Detections
+    if (camera.lastAnalysis?.modelUsed === "fire_detection") {
+      camera.lastAnalysis.fireDetections?.forEach((fire: FireDetectionBox) => {
+        const [x1, y1, x2, y2] = fire.box
+        ctx.strokeStyle = "red" // Fire in red
+        ctx.fillStyle = "red"
+        ctx.strokeRect(x1 * scaleX, y1 * scaleY, (x2 - x1) * scaleX, (y2 - y1) * scaleY)
+        ctx.fillText(`Fire ${fire.confidence.toFixed(2)}`, x1 * scaleX, y1 * scaleY - 5)
       })
     }
   }, [camera.lastAnalysis, camera.isActive, camera.modelType, currentPolygonPoints, drawPolygon, isDrawingArea])
@@ -180,6 +196,9 @@ export function CameraFeed({
     if (!isDrawingArea) onUpdateCameraConfig(camera.id, { designatedArea: { points: [] } })
   }
 
+  const hasFireDetections =
+    camera.lastAnalysis?.modelUsed === "fire_detection" && (camera.lastAnalysis.fireDetections?.length || 0) > 0
+
   return (
     <Card className="w-full flex flex-col">
       <CardHeader className="pb-2">
@@ -188,6 +207,11 @@ export function CameraFeed({
             <LucideCameraIcon className="h-5 w-5" /> {camera.name}
           </CardTitle>
           <div className="flex items-center gap-2">
+            {hasFireDetections && (
+              <Badge variant="destructive" className="flex items-center gap-1">
+                <Flame className="h-3 w-3" /> FIRE DETECTED
+              </Badge>
+            )}
             <Badge variant={camera.isActive ? "default" : "secondary"}>{camera.isActive ? "Active" : "Inactive"}</Badge>
             {isContinuouslyAnalyzing && camera.isActive && (
               <Badge variant="outline" className="border-sky-500 text-sky-500">
@@ -231,7 +255,7 @@ export function CameraFeed({
             </SelectContent>
           </Select>
         </div>
-        {camera.modelType === "person_detection_in_area" && (
+        {camera.modelType === "person_detection_in_area" && ( // Only show for this model
           <div className="space-y-2 pt-2 border-t">
             <Label className="text-xs">Designated Area</Label>
             <div className="flex gap-2">
@@ -254,7 +278,7 @@ export function CameraFeed({
           </div>
         )}
         {camera.lastAnalysis?.personInDesignatedArea !== undefined &&
-          camera.modelType === "person_detection_in_area" && (
+          camera.modelType === "person_detection_in_area" && ( // Only show for this model
             <div
               className={`flex items-center gap-2 p-2 rounded-md text-sm ${camera.lastAnalysis.personInDesignatedArea ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"}`}
             >
