@@ -5,35 +5,55 @@ import type { Camera } from "@/types/camera"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Play, Square, CameraIcon, Trash2 } from "lucide-react"
+import { Play, Square, CameraIcon, Trash2, Zap, ZapOff, RotateCcw } from "lucide-react"
 
 interface CameraFeedProps {
   camera: Camera
-  isAnalyzing: boolean
+  isAnalyzingSingleFrame: boolean
+  isContinuouslyAnalyzing: boolean
   onStart: () => void
   onStop: () => void
   onRemove: () => void
-  onAnalyze: () => void
+  onAnalyzeSingleFrame: () => void
+  onStartContinuousAnalysis: () => void
+  onStopContinuousAnalysis: () => void
   onVideoRef: (element: HTMLVideoElement | null) => void
 }
 
-export function CameraFeed({ camera, isAnalyzing, onStart, onStop, onRemove, onAnalyze, onVideoRef }: CameraFeedProps) {
+export function CameraFeed({
+  camera,
+  isAnalyzingSingleFrame,
+  isContinuouslyAnalyzing,
+  onStart,
+  onStop,
+  onRemove,
+  onAnalyzeSingleFrame,
+  onStartContinuousAnalysis,
+  onStopContinuousAnalysis,
+  onVideoRef,
+}: CameraFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
     onVideoRef(videoRef.current)
   }, [onVideoRef])
 
-  const getEmotionColor = (emotion: string) => {
+  const getEmotionColor = (emotion?: string) => {
+    if (!emotion) return "bg-gray-500"
     const colors: Record<string, string> = {
       happy: "bg-green-500",
       sad: "bg-blue-500",
       angry: "bg-red-500",
       surprised: "bg-yellow-500",
       neutral: "bg-gray-500",
+      Error: "bg-destructive",
     }
     return colors[emotion] || "bg-gray-500"
   }
+
+  const dominantEmotionDisplay = camera.lastAnalysis?.dominantEmotion || "N/A"
+  const confidenceDisplay =
+    camera.lastAnalysis?.confidence !== undefined ? `${(camera.lastAnalysis.confidence * 100).toFixed(1)}%` : "N/A"
 
   return (
     <Card className="w-full">
@@ -44,56 +64,89 @@ export function CameraFeed({ camera, isAnalyzing, onStart, onStop, onRemove, onA
         </CardTitle>
         <div className="flex items-center gap-2">
           <Badge variant={camera.isActive ? "default" : "secondary"}>{camera.isActive ? "Active" : "Inactive"}</Badge>
-          <Button variant="outline" size="sm" onClick={onRemove}>
+          {isContinuouslyAnalyzing && (
+            <Badge variant="outline" className="border-sky-500 text-sky-500">
+              Streaming Analysis
+            </Badge>
+          )}
+          <Button variant="outline" size="icon" onClick={onRemove} aria-label="Remove camera">
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="relative bg-black rounded-lg overflow-hidden">
-          <video ref={videoRef} autoPlay playsInline muted className="w-full h-48 object-cover" />
+        <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           {!camera.isActive && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50">
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80">
               <span className="text-white text-sm">Camera Inactive</span>
             </div>
           )}
         </div>
 
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {!camera.isActive ? (
-            <Button onClick={onStart} size="sm" className="flex-1">
+            <Button onClick={onStart} size="sm" className="col-span-2">
               <Play className="h-4 w-4 mr-2" />
-              Start
+              Start Camera
             </Button>
           ) : (
-            <Button onClick={onStop} variant="outline" size="sm" className="flex-1">
+            <Button onClick={onStop} variant="outline" size="sm" className="col-span-2">
               <Square className="h-4 w-4 mr-2" />
-              Stop
+              Stop Camera
             </Button>
           )}
-          <Button onClick={onAnalyze} disabled={!camera.isActive || isAnalyzing} size="sm" className="flex-1">
-            {isAnalyzing ? "Analyzing..." : "Analyze"}
+
+          <Button
+            onClick={onAnalyzeSingleFrame}
+            disabled={!camera.isActive || isAnalyzingSingleFrame || isContinuouslyAnalyzing}
+            size="sm"
+          >
+            <RotateCcw className="h-4 w-4 mr-2" />
+            {isAnalyzingSingleFrame ? "Analyzing..." : "Analyze Once"}
           </Button>
+
+          {isContinuouslyAnalyzing ? (
+            <Button onClick={onStopContinuousAnalysis} disabled={!camera.isActive} variant="destructive" size="sm">
+              <ZapOff className="h-4 w-4 mr-2" />
+              Stop Stream
+            </Button>
+          ) : (
+            <Button onClick={onStartContinuousAnalysis} disabled={!camera.isActive || isAnalyzingSingleFrame} size="sm">
+              <Zap className="h-4 w-4 mr-2" />
+              Start Stream
+            </Button>
+          )}
         </div>
 
         {camera.lastAnalysis && (
-          <div className="space-y-2">
+          <div className="space-y-2 pt-2 border-t">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Last Analysis:</span>
-              <Badge className={getEmotionColor(camera.lastAnalysis.dominantEmotion)}>
-                {camera.lastAnalysis.dominantEmotion}
-              </Badge>
+              <Badge className={getEmotionColor(camera.lastAnalysis.dominantEmotion)}>{dominantEmotionDisplay}</Badge>
             </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {Object.entries(camera.lastAnalysis.emotions).map(([emotion, value]) => (
-                <div key={emotion} className="flex justify-between">
-                  <span className="capitalize">{emotion}:</span>
-                  <span>{(value * 100).toFixed(1)}%</span>
+            {camera.lastAnalysis.dominantEmotion !== "Error" && (
+              <>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  {Object.entries(camera.lastAnalysis.emotions).map(([emotion, value]) => (
+                    <div key={emotion} className="flex justify-between">
+                      <span className="capitalize">{emotion}:</span>
+                      <span>{(value * 100).toFixed(1)}%</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+                <div className="text-xs text-muted-foreground">Confidence: {confidenceDisplay}</div>
+              </>
+            )}
+            {/* @ts-ignore */}
+            {camera.lastAnalysis.error && (
+              <p className="text-xs text-red-500">
+                {/* @ts-ignore */}
+                Error: {camera.lastAnalysis.error}
+              </p>
+            )}
             <div className="text-xs text-muted-foreground">
-              Confidence: {(camera.lastAnalysis.confidence * 100).toFixed(1)}%
+              Timestamp: {new Date(camera.lastAnalysis.timestamp).toLocaleTimeString()}
             </div>
           </div>
         )}
