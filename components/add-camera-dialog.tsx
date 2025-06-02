@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus } from "lucide-react"
+import type { Camera } from "@/types/camera"
 
 interface AddCameraDialogProps {
-  onAddCamera: (camera: { name: string; type: "webcam" | "rtsp"; url?: string; isActive: boolean }) => void
+  onAddCamera: (camera: Omit<Camera, "id" | "lastAnalysis" | "isActive">) => void
 }
 
 export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
@@ -28,7 +29,6 @@ export function AddCameraDialog({ onAddCamera }: AddCameraDialogProps) {
       name: name.trim(),
       type,
       url: type === "rtsp" ? url : undefined,
-      isActive: false,
     })
 
     setName("")

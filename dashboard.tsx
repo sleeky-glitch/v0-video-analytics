@@ -6,9 +6,8 @@ import { AddCameraDialog } from "@/components/add-camera-dialog"
 import { AnalyticsOverview } from "@/components/analytics-overview"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { RefreshCw, Zap, ZapOff } from "lucide-react"
+import { RefreshCw, Zap, ZapOff, CameraIcon as LucideCameraIcon } from "lucide-react" // Use LucideCameraIcon
 import { useState } from "react"
-import { CameraIcon } from "@/components/icons/camera-icon" // Import CameraIcon
 
 export default function VideoAnalyticsDashboard() {
   const {
@@ -19,7 +18,7 @@ export default function VideoAnalyticsDashboard() {
     removeCamera,
     startCamera,
     stopCamera,
-    captureAndAnalyze, // This is for single frame analysis
+    captureAndAnalyze,
     startContinuousAnalysis,
     stopContinuousAnalysis,
     setVideoRef,
@@ -41,22 +40,18 @@ export default function VideoAnalyticsDashboard() {
     const anyCameraContinuouslyAnalyzing = activeCameras.some((c) => isContinuouslyAnalyzing[c.id])
 
     if (anyCameraContinuouslyAnalyzing) {
-      // If any are on, turn all active ones off
       activeCameras.forEach((camera) => {
         if (isContinuouslyAnalyzing[camera.id]) {
           stopContinuousAnalysis(camera.id)
         }
       })
     } else {
-      // If all are off (or no active cameras), turn all active ones on
       activeCameras.forEach((camera) => {
         if (!isContinuouslyAnalyzing[camera.id]) {
           startContinuousAnalysis(camera.id)
         }
       })
     }
-    // This is a simplification; a more robust solution might track individual toggles
-    // For now, just reset the button state after a short delay
     setTimeout(() => setIsTogglingAllContinuous(false), 1000)
   }
 
@@ -69,7 +64,7 @@ export default function VideoAnalyticsDashboard() {
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold">Video Analytics Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Monitor live feeds and analyze sentiment in real-time</p>
+            <p className="text-sm text-muted-foreground">Real-time person and emotion detection</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -111,7 +106,7 @@ export default function VideoAnalyticsDashboard() {
         {cameras.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <CameraIcon className="h-12 w-12 text-muted-foreground mb-4" />
+              <LucideCameraIcon className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-xl font-semibold">No cameras added yet</h3>
               <p className="text-muted-foreground mb-6">
                 Add your first camera to start monitoring and analyzing video feeds.

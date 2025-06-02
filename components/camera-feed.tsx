@@ -1,11 +1,11 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import type { Camera } from "@/types/camera"
+import type { Camera, PersonDetection, FaceDetection } from "@/types/camera"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Play, Square, CameraIcon, Trash2, Zap, ZapOff, RotateCcw } from "lucide-react"
+import { Play, Square, CameraIcon as LucideCameraIcon, Trash2, Zap, ZapOff, RotateCcw } from "lucide-react"
 
 interface CameraFeedProps {
   camera: Camera
@@ -33,33 +33,100 @@ export function CameraFeed({
   onVideoRef,
 }: CameraFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     onVideoRef(videoRef.current)
   }, [onVideoRef])
 
-  const getEmotionColor = (emotion?: string) => {
-    if (!emotion) return "bg-gray-500"
-    const colors: Record<string, string> = {
-      happy: "bg-green-500",
-      sad: "bg-blue-500",
-      angry: "bg-red-500",
-      surprised: "bg-yellow-500",
-      neutral: "bg-gray-500",
-      Error: "bg-destructive",
+  useEffect(() => {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas || !camera.isActive || !camera.lastAnalysis?.detections) {
+      // Clear canvas if not active or no detections
+      if (canvas) {
+        const ctx = canvas.getContext("2d")
+        if (ctx) {
+          // Ensure canvas is same size as video for clearing
+          if (video && video.videoWidth > 0) {
+            canvas.width = video.videoWidth
+            canvas.height = video.videoHeight
+          }
+          ctx.clearRect(0, 0, canvas.width, canvas.height)
+        }
+      }
+      return
     }
-    return colors[emotion] || "bg-gray-500"
-  }
 
-  const dominantEmotionDisplay = camera.lastAnalysis?.dominantEmotion || "N/A"
-  const confidenceDisplay =
-    camera.lastAnalysis?.confidence !== undefined ? `${(camera.lastAnalysis.confidence * 100).toFixed(1)}%` : "N/A"
+    // Ensure canvas dimensions match video display dimensions for accurate overlay
+    // This is crucial if the video element is styled (e.g., width: 100%)
+    const displayWidth = video.clientWidth
+    const displayHeight = video.clientHeight
+    if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+      canvas.width = displayWidth
+      canvas.height = displayHeight
+    }
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    // Scaling factors if video's natural dimensions differ from display dimensions
+    const scaleX = displayWidth / (camera.lastAnalysis.frameWidth || video.videoWidth || displayWidth)
+    const scaleY = displayHeight / (camera.lastAnalysis.frameHeight || video.videoHeight || displayHeight)
+
+    ctx.lineWidth = 2
+    ctx.font = "14px Arial"
+
+    camera.lastAnalysis.detections.forEach((person: PersonDetection) => {
+      const [p_x1, p_y1, p_x2, p_y2] = person.person_box
+      const scaled_p_x1 = p_x1 * scaleX
+      const scaled_p_y1 = p_y1 * scaleY
+      const scaled_p_w = (p_x2 - p_x1) * scaleX
+      const scaled_p_h = (p_y2 - p_y1) * scaleY
+
+      // Draw person box (green)
+      ctx.strokeStyle = "lime" // Brighter green
+      ctx.strokeRect(scaled_p_x1, scaled_p_y1, scaled_p_w, scaled_p_h)
+      ctx.fillStyle = "lime"
+      ctx.fillText(
+        `Person ${person.confidence.toFixed(2)}`,
+        scaled_p_x1,
+        scaled_p_y1 > 10 ? scaled_p_y1 - 5 : scaled_p_y1 + 10, // Adjust text position
+      )
+
+      person.faces.forEach((face: FaceDetection) => {
+        const [f_rx, f_ry, f_w, f_h] = face.box // Relative to person ROI
+
+        // Absolute face coordinates within the original frame
+        const abs_f_x = p_x1 + f_rx
+        const abs_f_y = p_y1 + f_ry
+
+        // Scale absolute face coordinates and dimensions
+        const scaled_f_x = abs_f_x * scaleX
+        const scaled_f_y = abs_f_y * scaleY
+        const scaled_f_w = f_w * scaleX
+        const scaled_f_h = f_h * scaleY
+
+        // Draw face box (blue)
+        ctx.strokeStyle = "blue"
+        ctx.strokeRect(scaled_f_x, scaled_f_y, scaled_f_w, scaled_f_h)
+        ctx.fillStyle = "blue"
+        ctx.fillText(
+          `${face.emotion} ${face.score.toFixed(2)}`,
+          scaled_f_x,
+          scaled_f_y > 10 ? scaled_f_y - 5 : scaled_f_y + 10,
+        )
+      })
+    })
+  }, [camera.lastAnalysis, camera.isActive]) // Redraw when analysis or active state changes
 
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <CameraIcon className="h-4 w-4" />
+          <LucideCameraIcon className="h-4 w-4" />
           {camera.name}
         </CardTitle>
         <div className="flex items-center gap-2">
@@ -76,7 +143,8 @@ export function CameraFeed({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
-          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover block" />
+          <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none" />
           {!camera.isActive && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80">
               <span className="text-white text-sm">Camera Inactive</span>
@@ -103,7 +171,7 @@ export function CameraFeed({
             size="sm"
           >
             <RotateCcw className="h-4 w-4 mr-2" />
-            {isAnalyzingSingleFrame ? "Analyzing..." : "Analyze Once"}
+            {isAnalyzingSingleFrame && !isContinuouslyAnalyzing ? "Analyzing..." : "Analyze Once"}
           </Button>
 
           {isContinuouslyAnalyzing ? (
@@ -118,37 +186,8 @@ export function CameraFeed({
             </Button>
           )}
         </div>
-
-        {camera.lastAnalysis && (
-          <div className="space-y-2 pt-2 border-t">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Last Analysis:</span>
-              <Badge className={getEmotionColor(camera.lastAnalysis.dominantEmotion)}>{dominantEmotionDisplay}</Badge>
-            </div>
-            {camera.lastAnalysis.dominantEmotion !== "Error" && (
-              <>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                  {Object.entries(camera.lastAnalysis.emotions).map(([emotion, value]) => (
-                    <div key={emotion} className="flex justify-between">
-                      <span className="capitalize">{emotion}:</span>
-                      <span>{(value * 100).toFixed(1)}%</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-xs text-muted-foreground">Confidence: {confidenceDisplay}</div>
-              </>
-            )}
-            {/* @ts-ignore */}
-            {camera.lastAnalysis.error && (
-              <p className="text-xs text-red-500">
-                {/* @ts-ignore */}
-                Error: {camera.lastAnalysis.error}
-              </p>
-            )}
-            <div className="text-xs text-muted-foreground">
-              Timestamp: {new Date(camera.lastAnalysis.timestamp).toLocaleTimeString()}
-            </div>
-          </div>
+        {camera.lastAnalysis?.error && (
+          <p className="text-xs text-red-500 pt-2 border-t">Error: {camera.lastAnalysis.error}</p>
         )}
       </CardContent>
     </Card>

@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useRef, useCallback, useEffect } from "react"
-import type { Camera, SentimentAnalysis } from "@/types/camera"
+import type { Camera, FrameDetections } from "@/types/camera"
 
-const CONTINUOUS_ANALYSIS_INTERVAL = 2000 // 2 seconds
+const CONTINUOUS_ANALYSIS_INTERVAL = 1000 // Analyze roughly every 1 second, adjust as needed
 
 export function useCamera() {
   const [cameras, setCameras] = useState<Camera[]>([])
@@ -14,58 +14,56 @@ export function useCamera() {
   const streamRefs = useRef<Record<string, MediaStream | null>>({})
   const continuousAnalysisIntervals = useRef<Record<string, NodeJS.Timeout | null>>({})
 
-  const setCameraAnalysisResult = useCallback(
-    (
-      cameraId: string,
-      analysisResult:
-        | SentimentAnalysis
-        | { error: string; timestamp: number; emotions: {}; dominantEmotion: string; confidence: number },
-    ) => {
-      setCameras((prev) =>
-        prev.map((camera) =>
-          camera.id === cameraId
-            ? {
-                ...camera,
-                lastAnalysis: analysisResult as SentimentAnalysis, // Type assertion for simplicity, ensure error structure matches
-              }
-            : camera,
-        ),
-      )
-    },
-    [],
-  )
+  const setCameraAnalysisResult = useCallback((cameraId: string, analysisResult: FrameDetections) => {
+    setCameras((prev) =>
+      prev.map((camera) =>
+        camera.id === cameraId
+          ? {
+              ...camera,
+              lastAnalysis: analysisResult,
+            }
+          : camera,
+      ),
+    )
+  }, [])
 
   const captureAndAnalyze = useCallback(
     async (cameraId: string, isContinuous = false) => {
       const videoElement = videoRefs.current[cameraId]
-      // Prevent re-entry if already analyzing this specific frame or if continuous analysis is on and an analysis is in progress
       if (
         !videoElement ||
+        videoElement.paused ||
+        videoElement.ended ||
+        videoElement.videoWidth === 0 ||
         (!isContinuous && isAnalyzingSingleFrame[cameraId]) ||
         (isContinuous && isAnalyzingSingleFrame[cameraId])
       ) {
-        // If continuous, and an analysis is already running, we just skip this tick.
-        // The isAnalyzingSingleFrame flag will be cleared by the ongoing analysis.
+        if (isContinuous && isAnalyzingSingleFrame[cameraId]) {
+          // If continuous and already analyzing, skip this tick
+        } else if (!videoElement || videoElement.videoWidth === 0) {
+          console.warn(`[Camera ${cameraId}] Video element not ready for capture.`)
+        }
         return
       }
 
       if (!isContinuous) {
         setIsAnalyzingSingleFrame((prev) => ({ ...prev, [cameraId]: true }))
       } else {
-        // For continuous, we also use isAnalyzingSingleFrame to prevent overlapping API calls
-        // but the overall state is managed by isContinuouslyAnalyzing
-        if (isAnalyzingSingleFrame[cameraId]) return // Already processing a frame
+        if (isAnalyzingSingleFrame[cameraId]) return
         setIsAnalyzingSingleFrame((prev) => ({ ...prev, [cameraId]: true }))
       }
 
+      const frameWidth = videoElement.videoWidth
+      const frameHeight = videoElement.videoHeight
+
       try {
         const canvas = document.createElement("canvas")
-        canvas.width = videoElement.videoWidth
-        canvas.height = videoElement.videoHeight
+        canvas.width = frameWidth
+        canvas.height = frameHeight
         const ctx = canvas.getContext("2d")
 
         if (ctx) {
-          ctx.drawImage(videoElement, 0, 0)
+          ctx.drawImage(videoElement, 0, 0, frameWidth, frameHeight)
           const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8))
 
           if (blob) {
@@ -73,11 +71,13 @@ export function useCamera() {
             formData.append("image", blob)
 
             try {
-              const apiUrl = "https://192.168.100.131:5000/detect" // Ensure this is accessible
+              // Use the backend API URL you provided
+              const apiUrl = "https://192.168.100.131:5000/detect"
               console.log(`[Camera ${cameraId}] Sending image to API: ${apiUrl}`)
               const response = await fetch(apiUrl, {
                 method: "POST",
                 body: formData,
+                // mode: 'cors', // Usually default, but good to be explicit if issues arise
               })
 
               console.log(`[Camera ${cameraId}] API Response Status: ${response.status} ${response.statusText}`)
@@ -87,54 +87,55 @@ export function useCamera() {
                 throw new Error(`API request failed: ${response.status} ${errorText}`)
               }
 
-              const result = await response.json()
+              const result = await response.json() // Expects { detections: PersonDetection[] }
               console.log(`[Camera ${cameraId}] API Analysis Result:`, result)
+
               setCameraAnalysisResult(cameraId, {
                 timestamp: Date.now(),
-                emotions: result.emotions || {},
-                dominantEmotion: result.dominantEmotion || "neutral",
-                confidence: result.confidence || 0,
+                detections: result.detections || [],
+                frameWidth,
+                frameHeight,
               })
             } catch (error) {
               console.error(`[Camera ${cameraId}] Analysis fetch error:`, error)
               setCameraAnalysisResult(cameraId, {
-                error: (error as Error).message || "Analysis failed",
                 timestamp: Date.now(),
-                emotions: {},
-                dominantEmotion: "Error",
-                confidence: 0,
+                detections: [],
+                error: (error as Error).message || "Analysis failed",
+                frameWidth,
+                frameHeight,
               })
             }
+          } else {
+            throw new Error("Failed to create blob from canvas.")
           }
+        } else {
+          throw new Error("Failed to get 2D context from canvas.")
         }
       } catch (captureError) {
         console.error(`[Camera ${cameraId}] Capture error:`, captureError)
         setCameraAnalysisResult(cameraId, {
-          error: (captureError as Error).message || "Capture failed",
           timestamp: Date.now(),
-          emotions: {},
-          dominantEmotion: "Error",
-          confidence: 0,
+          detections: [],
+          error: (captureError as Error).message || "Capture failed",
+          frameWidth,
+          frameHeight,
         })
       } finally {
-        // Always clear the single frame analysis lock
         setIsAnalyzingSingleFrame((prev) => ({ ...prev, [cameraId]: false }))
       }
     },
-    [isAnalyzingSingleFrame, setCameraAnalysisResult], // Removed isContinuouslyAnalyzing from deps as it's passed as arg
+    [isAnalyzingSingleFrame, setCameraAnalysisResult],
   )
 
   const startContinuousAnalysis = useCallback(
     (cameraId: string) => {
-      if (continuousAnalysisIntervals.current[cameraId] || !cameras.find((c) => c.id === cameraId && c.isActive)) {
-        return // Already running or camera not active
+      const camera = cameras.find((c) => c.id === cameraId)
+      if (continuousAnalysisIntervals.current[cameraId] || !camera || !camera.isActive) {
+        return
       }
-
       setIsContinuouslyAnalyzing((prev) => ({ ...prev, [cameraId]: true }))
-
-      // Immediately trigger first analysis
-      captureAndAnalyze(cameraId, true)
-
+      captureAndAnalyze(cameraId, true) // Immediate first analysis
       const intervalId = setInterval(() => {
         captureAndAnalyze(cameraId, true)
       }, CONTINUOUS_ANALYSIS_INTERVAL)
@@ -149,15 +150,14 @@ export function useCamera() {
       continuousAnalysisIntervals.current[cameraId] = null
     }
     setIsContinuouslyAnalyzing((prev) => ({ ...prev, [cameraId]: false }))
-    // Also clear the single frame lock if it was somehow left on
     setIsAnalyzingSingleFrame((prev) => ({ ...prev, [cameraId]: false }))
   }, [])
 
-  const addCamera = useCallback((camera: Omit<Camera, "id" | "lastAnalysis">) => {
+  const addCamera = useCallback((cameraData: Omit<Camera, "id" | "lastAnalysis" | "isActive">) => {
     const newCamera: Camera = {
-      ...camera,
+      ...cameraData,
       id: `camera-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      isActive: false, // Ensure isActive is part of the type and initialized
+      isActive: false,
     }
     setCameras((prev) => [...prev, newCamera])
     setIsContinuouslyAnalyzing((prev) => ({ ...prev, [newCamera.id]: false }))
@@ -167,7 +167,7 @@ export function useCamera() {
 
   const removeCamera = useCallback(
     (cameraId: string) => {
-      stopContinuousAnalysis(cameraId) // Stop analysis before removing
+      stopContinuousAnalysis(cameraId)
       const stream = streamRefs.current[cameraId]
       if (stream) {
         stream.getTracks().forEach((track) => track.stop())
@@ -192,27 +192,32 @@ export function useCamera() {
   const startCamera = useCallback(async (cameraId: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480 },
+        video: { width: 640, height: 480 }, // Standard webcam resolution
       })
       streamRefs.current[cameraId] = stream
       const videoElement = videoRefs.current[cameraId]
       if (videoElement) {
         videoElement.srcObject = stream
+        videoElement.onloadedmetadata = () => {
+          // Ensure metadata is loaded before setting active
+          setCameras((prev) => prev.map((cam) => (cam.id === cameraId ? { ...cam, isActive: true } : cam)))
+        }
+      } else {
+        setCameras((prev) => prev.map((cam) => (cam.id === cameraId ? { ...cam, isActive: true } : cam)))
       }
-      setCameras((prev) => prev.map((camera) => (camera.id === cameraId ? { ...camera, isActive: true } : camera)))
     } catch (error) {
       console.error("Error starting camera:", error)
-      // Optionally update camera state to show an error
+      // Update camera state to show error if needed
     }
   }, [])
 
   const stopCamera = useCallback(
     (cameraId: string) => {
-      stopContinuousAnalysis(cameraId) // Stop continuous analysis if camera is stopped
+      stopContinuousAnalysis(cameraId)
       const stream = streamRefs.current[cameraId]
       if (stream) {
         stream.getTracks().forEach((track) => track.stop())
-        // Do not delete streamRefs.current[cameraId] here, allow restart
+        // Don't delete streamRef, videoRef might still be used or camera restarted
       }
       setCameras((prev) => prev.map((camera) => (camera.id === cameraId ? { ...camera, isActive: false } : camera)))
     },
@@ -223,24 +228,26 @@ export function useCamera() {
     videoRefs.current[cameraId] = element
   }, [])
 
-  // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
       Object.values(continuousAnalysisIntervals.current).forEach((intervalId) => {
         if (intervalId) clearInterval(intervalId)
+      })
+      Object.values(streamRefs.current).forEach((stream) => {
+        stream?.getTracks().forEach((track) => track.stop())
       })
     }
   }, [])
 
   return {
     cameras,
-    isAnalyzingSingleFrame, // Renamed from isAnalyzing
+    isAnalyzingSingleFrame,
     isContinuouslyAnalyzing,
     addCamera,
     removeCamera,
     startCamera,
     stopCamera,
-    captureAndAnalyze: (cameraId: string) => captureAndAnalyze(cameraId, false), // Expose single frame analysis
+    captureAndAnalyze: (cameraId: string) => captureAndAnalyze(cameraId, false),
     startContinuousAnalysis,
     stopContinuousAnalysis,
     setVideoRef,
