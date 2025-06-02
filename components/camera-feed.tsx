@@ -1,11 +1,27 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import type { Camera, PersonDetection, FaceDetection } from "@/types/camera"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import type React from "react"
+import { useEffect, useRef, useState, useCallback } from "react"
+import type { Camera, Point, AnalysisModelType, PersonDetection, FaceDetection } from "@/types/camera"
+import { MODEL_DISPLAY_NAMES, AVAILABLE_MODELS } from "@/types/camera"
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Play, Square, CameraIcon as LucideCameraIcon, Trash2, Zap, ZapOff, RotateCcw } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
+import {
+  Play,
+  Square,
+  CameraIcon as LucideCameraIcon,
+  Trash2,
+  Zap,
+  ZapOff,
+  RotateCcw,
+  Edit3,
+  CheckCircle,
+  AlertTriangle,
+  Eraser,
+} from "lucide-react"
 
 interface CameraFeedProps {
   camera: Camera
@@ -18,6 +34,7 @@ interface CameraFeedProps {
   onStartContinuousAnalysis: () => void
   onStopContinuousAnalysis: () => void
   onVideoRef: (element: HTMLVideoElement | null) => void
+  onUpdateCameraConfig: (cameraId: string, newConfig: Partial<Pick<Camera, "modelType" | "designatedArea">>) => void
 }
 
 export function CameraFeed({
@@ -31,35 +48,65 @@ export function CameraFeed({
   onStartContinuousAnalysis,
   onStopContinuousAnalysis,
   onVideoRef,
+  onUpdateCameraConfig,
 }: CameraFeedProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [isDrawingArea, setIsDrawingArea] = useState(false)
+  const [currentPolygonPoints, setCurrentPolygonPoints] = useState<Point[]>(camera.designatedArea?.points || [])
 
   useEffect(() => {
     onVideoRef(videoRef.current)
   }, [onVideoRef])
 
+  // Update local polygon points if camera prop changes (e.g. loaded from storage)
+  useEffect(() => {
+    setCurrentPolygonPoints(camera.designatedArea?.points || [])
+  }, [camera.designatedArea])
+
+  const drawPolygon = useCallback(
+    (
+      ctx: CanvasRenderingContext2D,
+      points: Point[],
+      scaleX: number,
+      scaleY: number,
+      color = "rgba(255, 255, 0, 0.7)",
+    ) => {
+      if (points.length === 0) return
+      ctx.beginPath()
+      ctx.moveTo(points[0].x * scaleX, points[0].y * scaleY)
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x * scaleX, points[i].y * scaleY)
+      }
+      if (points.length > 2 && isDrawingArea) {
+        // Don't close if still drawing
+        // ctx.closePath(); // Don't close path while drawing to see individual lines
+      } else if (points.length > 2) {
+        ctx.closePath()
+      }
+      ctx.strokeStyle = color
+      ctx.lineWidth = 2
+      ctx.stroke()
+      if (points.length > 2 && !isDrawingArea) {
+        ctx.fillStyle = "rgba(255, 255, 0, 0.2)" // Light fill for completed area
+        ctx.fill()
+      }
+      // Draw points
+      points.forEach((p) => {
+        ctx.beginPath()
+        ctx.arc(p.x * scaleX, p.y * scaleY, 3, 0, 2 * Math.PI)
+        ctx.fillStyle = color
+        ctx.fill()
+      })
+    },
+    [isDrawingArea],
+  )
+
   useEffect(() => {
     const video = videoRef.current
     const canvas = canvasRef.current
-    if (!video || !canvas || !camera.isActive || !camera.lastAnalysis?.detections) {
-      // Clear canvas if not active or no detections
-      if (canvas) {
-        const ctx = canvas.getContext("2d")
-        if (ctx) {
-          // Ensure canvas is same size as video for clearing
-          if (video && video.videoWidth > 0) {
-            canvas.width = video.videoWidth
-            canvas.height = video.videoHeight
-          }
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-        }
-      }
-      return
-    }
+    if (!video || !canvas) return
 
-    // Ensure canvas dimensions match video display dimensions for accurate overlay
-    // This is crucial if the video element is styled (e.g., width: 100%)
     const displayWidth = video.clientWidth
     const displayHeight = video.clientHeight
     if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
@@ -72,79 +119,128 @@ export function CameraFeed({
 
     ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // Scaling factors if video's natural dimensions differ from display dimensions
-    const scaleX = displayWidth / (camera.lastAnalysis.frameWidth || video.videoWidth || displayWidth)
-    const scaleY = displayHeight / (camera.lastAnalysis.frameHeight || video.videoHeight || displayHeight)
+    if (!camera.isActive) return
 
-    ctx.lineWidth = 2
-    ctx.font = "14px Arial"
+    const nativeWidth = camera.lastAnalysis?.frameWidth || video.videoWidth || displayWidth
+    const nativeHeight = camera.lastAnalysis?.frameHeight || video.videoHeight || displayHeight
 
-    camera.lastAnalysis.detections.forEach((person: PersonDetection) => {
-      const [p_x1, p_y1, p_x2, p_y2] = person.person_box
-      const scaled_p_x1 = p_x1 * scaleX
-      const scaled_p_y1 = p_y1 * scaleY
-      const scaled_p_w = (p_x2 - p_x1) * scaleX
-      const scaled_p_h = (p_y2 - p_y1) * scaleY
+    const scaleX = displayWidth > 0 && nativeWidth > 0 ? displayWidth / nativeWidth : 1
+    const scaleY = displayHeight > 0 && nativeHeight > 0 ? displayHeight / nativeHeight : 1
 
-      // Draw person box (green)
-      ctx.strokeStyle = "lime" // Brighter green
-      ctx.strokeRect(scaled_p_x1, scaled_p_y1, scaled_p_w, scaled_p_h)
-      ctx.fillStyle = "lime"
-      ctx.fillText(
-        `Person ${person.confidence.toFixed(2)}`,
-        scaled_p_x1,
-        scaled_p_y1 > 10 ? scaled_p_y1 - 5 : scaled_p_y1 + 10, // Adjust text position
-      )
+    // Draw designated area if model is active and points exist
+    if (camera.modelType === "person_detection_in_area" && currentPolygonPoints.length > 0) {
+      drawPolygon(ctx, currentPolygonPoints, displayWidth, displayHeight, "yellow") // Points are already normalized
+    }
 
-      person.faces.forEach((face: FaceDetection) => {
-        const [f_rx, f_ry, f_w, f_h] = face.box // Relative to person ROI
+    // Draw detections from API (person boxes, face boxes)
+    if (camera.lastAnalysis?.detections) {
+      ctx.lineWidth = 2
+      ctx.font = "12px Arial"
+      camera.lastAnalysis.detections.forEach((person: PersonDetection) => {
+        const [p_x1, p_y1, p_x2, p_y2] = person.person_box
+        const scaled_p_x1 = p_x1 * scaleX
+        const scaled_p_y1 = p_y1 * scaleY
+        const scaled_p_w = (p_x2 - p_x1) * scaleX
+        const scaled_p_h = (p_y2 - p_y1) * scaleY
 
-        // Absolute face coordinates within the original frame
-        const abs_f_x = p_x1 + f_rx
-        const abs_f_y = p_y1 + f_ry
+        ctx.strokeStyle = "lime"
+        ctx.strokeRect(scaled_p_x1, scaled_p_y1, scaled_p_w, scaled_p_h)
+        ctx.fillStyle = "lime"
+        ctx.fillText(`P ${person.confidence.toFixed(2)}`, scaled_p_x1, scaled_p_y1 - 5)
 
-        // Scale absolute face coordinates and dimensions
-        const scaled_f_x = abs_f_x * scaleX
-        const scaled_f_y = abs_f_y * scaleY
-        const scaled_f_w = f_w * scaleX
-        const scaled_f_h = f_h * scaleY
+        person.faces.forEach((face: FaceDetection) => {
+          const [f_rx, f_ry, f_w, f_h] = face.box
+          const abs_f_x = p_x1 + f_rx
+          const abs_f_y = p_y1 + f_ry
+          const scaled_f_x = abs_f_x * scaleX
+          const scaled_f_y = abs_f_y * scaleY
+          const scaled_f_w = f_w * scaleX
+          const scaled_f_h = f_h * scaleY
 
-        // Draw face box (blue)
-        ctx.strokeStyle = "blue"
-        ctx.strokeRect(scaled_f_x, scaled_f_y, scaled_f_w, scaled_f_h)
-        ctx.fillStyle = "blue"
-        ctx.fillText(
-          `${face.emotion} ${face.score.toFixed(2)}`,
-          scaled_f_x,
-          scaled_f_y > 10 ? scaled_f_y - 5 : scaled_f_y + 10,
-        )
+          ctx.strokeStyle = "blue"
+          ctx.strokeRect(scaled_f_x, scaled_f_y, scaled_f_w, scaled_f_h)
+          ctx.fillStyle = "blue"
+          ctx.fillText(`${face.emotion.substring(0, 3)} ${face.score.toFixed(2)}`, scaled_f_x, scaled_f_y - 5)
+        })
       })
-    })
-  }, [camera.lastAnalysis, camera.isActive]) // Redraw when analysis or active state changes
+    }
+  }, [camera.lastAnalysis, camera.isActive, camera.modelType, currentPolygonPoints, drawPolygon, isDrawingArea])
+
+  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawingArea || camera.modelType !== "person_detection_in_area") return
+
+    const canvas = canvasRef.current
+    const video = videoRef.current
+    if (!canvas || !video || video.videoWidth === 0 || video.videoHeight === 0) return
+
+    const rect = canvas.getBoundingClientRect()
+    // Click coordinates relative to the canvas element
+    const x = event.clientX - rect.left
+    const y = event.clientY - rect.top
+
+    // Normalize coordinates based on the video's display size on canvas
+    const normalizedX = x / canvas.width
+    const normalizedY = y / canvas.height
+
+    setCurrentPolygonPoints((prev) => [...prev, { x: normalizedX, y: normalizedY }])
+  }
+
+  const handleModelChange = (newModel: AnalysisModelType) => {
+    onUpdateCameraConfig(camera.id, { modelType: newModel })
+    if (newModel !== "person_detection_in_area") {
+      setIsDrawingArea(false) // Turn off drawing mode if switching away
+      setCurrentPolygonPoints([]) // Clear points if not area detection model
+    } else {
+      // If switching to area detection, initialize points from camera state or empty
+      setCurrentPolygonPoints(camera.designatedArea?.points || [])
+    }
+  }
+
+  const toggleDrawingArea = () => {
+    if (isDrawingArea) {
+      // Finishing drawing
+      onUpdateCameraConfig(camera.id, { designatedArea: { points: currentPolygonPoints } })
+    }
+    setIsDrawingArea(!isDrawingArea)
+  }
+
+  const clearDrawingArea = () => {
+    setCurrentPolygonPoints([])
+    if (!isDrawingArea) {
+      // If not actively drawing, also update the camera config
+      onUpdateCameraConfig(camera.id, { designatedArea: { points: [] } })
+    }
+  }
 
   return (
-    <Card className="w-full">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <LucideCameraIcon className="h-4 w-4" />
-          {camera.name}
-        </CardTitle>
-        <div className="flex items-center gap-2">
-          <Badge variant={camera.isActive ? "default" : "secondary"}>{camera.isActive ? "Active" : "Inactive"}</Badge>
-          {isContinuouslyAnalyzing && (
-            <Badge variant="outline" className="border-sky-500 text-sky-500">
-              Streaming Analysis
-            </Badge>
-          )}
-          <Button variant="outline" size="icon" onClick={onRemove} aria-label="Remove camera">
-            <Trash2 className="h-4 w-4" />
-          </Button>
+    <Card className="w-full flex flex-col">
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <CardTitle className="text-base font-medium flex items-center gap-2">
+            <LucideCameraIcon className="h-5 w-5" />
+            {camera.name}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Badge variant={camera.isActive ? "default" : "secondary"}>{camera.isActive ? "Active" : "Inactive"}</Badge>
+            {isContinuouslyAnalyzing && camera.isActive && (
+              <Badge variant="outline" className="border-sky-500 text-sky-500">
+                Live Analysis
+              </Badge>
+            )}
+            <Button variant="ghost" size="icon" onClick={onRemove} aria-label="Remove camera" className="h-8 w-8">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="relative bg-black rounded-lg overflow-hidden aspect-video">
+      <CardContent className="space-y-3 flex-grow">
+        <div className="relative bg-black rounded-md overflow-hidden aspect-video">
           <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover block" />
-          <canvas ref={canvasRef} className="absolute top-0 left-0 w-full h-full pointer-events-none" />
+          <canvas
+            ref={canvasRef}
+            className={`absolute top-0 left-0 w-full h-full ${isDrawingArea && camera.modelType === "person_detection_in_area" ? "cursor-crosshair" : "pointer-events-none"}`}
+            onClick={handleCanvasClick}
+          />
           {!camera.isActive && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80">
               <span className="text-white text-sm">Camera Inactive</span>
@@ -152,19 +248,77 @@ export function CameraFeed({
           )}
         </div>
 
+        <div className="space-y-1">
+          <Label htmlFor={`model-select-${camera.id}`} className="text-xs">
+            Analysis Model
+          </Label>
+          <Select value={camera.modelType} onValueChange={handleModelChange}>
+            <SelectTrigger id={`model-select-${camera.id}`} className="h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {AVAILABLE_MODELS.map((model) => (
+                <SelectItem
+                  key={model}
+                  value={model}
+                  disabled={model === "person_count" || model === "queue_length_estimation"}
+                >
+                  {MODEL_DISPLAY_NAMES[model]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {camera.modelType === "person_detection_in_area" && (
+          <div className="space-y-2 pt-2 border-t">
+            <Label className="text-xs">Designated Area</Label>
+            <div className="flex gap-2">
+              <Button onClick={toggleDrawingArea} variant="outline" size="sm" className="flex-1">
+                <Edit3 className={`mr-2 h-4 w-4 ${isDrawingArea ? "text-destructive" : ""}`} />
+                {isDrawingArea ? "Finish Drawing" : "Draw Area"}
+              </Button>
+              <Button
+                onClick={clearDrawingArea}
+                variant="outline"
+                size="sm"
+                disabled={currentPolygonPoints.length === 0 && !isDrawingArea}
+              >
+                <Eraser className="mr-2 h-4 w-4" />
+                Clear
+              </Button>
+            </div>
+            {currentPolygonPoints.length > 0 && !isDrawingArea && (
+              <p className="text-xs text-muted-foreground">{currentPolygonPoints.length} points defined.</p>
+            )}
+          </div>
+        )}
+
+        {camera.lastAnalysis?.personInDesignatedArea !== undefined &&
+          camera.modelType === "person_detection_in_area" && (
+            <div
+              className={`flex items-center gap-2 p-2 rounded-md text-sm ${camera.lastAnalysis.personInDesignatedArea ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300"}`}
+            >
+              {camera.lastAnalysis.personInDesignatedArea ? (
+                <AlertTriangle className="h-5 w-5" />
+              ) : (
+                <CheckCircle className="h-5 w-5" />
+              )}
+              Person in Area: {camera.lastAnalysis.personInDesignatedArea ? "DETECTED" : "Clear"}
+            </div>
+          )}
+      </CardContent>
+      <CardFooter className="flex-col items-stretch space-y-2 pt-3 border-t">
         <div className="grid grid-cols-2 gap-2">
           {!camera.isActive ? (
             <Button onClick={onStart} size="sm" className="col-span-2">
-              <Play className="h-4 w-4 mr-2" />
-              Start Camera
+              <Play className="h-4 w-4 mr-2" /> Start Camera
             </Button>
           ) : (
             <Button onClick={onStop} variant="outline" size="sm" className="col-span-2">
-              <Square className="h-4 w-4 mr-2" />
-              Stop Camera
+              <Square className="h-4 w-4 mr-2" /> Stop Camera
             </Button>
           )}
-
           <Button
             onClick={onAnalyzeSingleFrame}
             disabled={!camera.isActive || isAnalyzingSingleFrame || isContinuouslyAnalyzing}
@@ -173,23 +327,24 @@ export function CameraFeed({
             <RotateCcw className="h-4 w-4 mr-2" />
             {isAnalyzingSingleFrame && !isContinuouslyAnalyzing ? "Analyzing..." : "Analyze Once"}
           </Button>
-
           {isContinuouslyAnalyzing ? (
             <Button onClick={onStopContinuousAnalysis} disabled={!camera.isActive} variant="destructive" size="sm">
-              <ZapOff className="h-4 w-4 mr-2" />
-              Stop Stream
+              <ZapOff className="h-4 w-4 mr-2" /> Stop Stream
             </Button>
           ) : (
             <Button onClick={onStartContinuousAnalysis} disabled={!camera.isActive || isAnalyzingSingleFrame} size="sm">
-              <Zap className="h-4 w-4 mr-2" />
-              Start Stream
+              <Zap className="h-4 w-4 mr-2" /> Start Stream
             </Button>
           )}
         </div>
-        {camera.lastAnalysis?.error && (
-          <p className="text-xs text-red-500 pt-2 border-t">Error: {camera.lastAnalysis.error}</p>
+        {camera.lastAnalysis?.error && <p className="text-xs text-red-500 pt-2">Error: {camera.lastAnalysis.error}</p>}
+        {camera.lastAnalysis && !camera.lastAnalysis.error && (
+          <p className="text-xs text-muted-foreground text-center pt-1">
+            Last analysis: {new Date(camera.lastAnalysis.timestamp).toLocaleTimeString()}
+            {camera.lastAnalysis.modelUsed && ` (Model: ${MODEL_DISPLAY_NAMES[camera.lastAnalysis.modelUsed]})`}
+          </p>
         )}
-      </CardContent>
+      </CardFooter>
     </Card>
   )
 }

@@ -6,7 +6,7 @@ import { AddCameraDialog } from "@/components/add-camera-dialog"
 import { AnalyticsOverview } from "@/components/analytics-overview"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { RefreshCw, Zap, ZapOff, CameraIcon as LucideCameraIcon } from "lucide-react" // Use LucideCameraIcon
+import { RefreshCw, Zap, ZapOff, CameraIcon as LucideCameraIcon } from "lucide-react"
 import { useState } from "react"
 
 export default function VideoAnalyticsDashboard() {
@@ -22,6 +22,7 @@ export default function VideoAnalyticsDashboard() {
     startContinuousAnalysis,
     stopContinuousAnalysis,
     setVideoRef,
+    updateCameraConfig, // Added this
   } = useCamera()
 
   const [isTogglingAllContinuous, setIsTogglingAllContinuous] = useState(false)
@@ -59,12 +60,12 @@ export default function VideoAnalyticsDashboard() {
   const anyCameraIsContinuouslyAnalyzing = cameras.some((c) => c.isActive && isContinuouslyAnalyzing[c.id])
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="container mx-auto p-4 sm:p-6 space-y-6">
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">Video Analytics Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Real-time person and emotion detection</p>
+            <h1 className="text-2xl sm:text-3xl font-bold">Advanced Video Analytics</h1>
+            <p className="text-sm text-muted-foreground">Multi-model real-time video processing</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -115,7 +116,7 @@ export default function VideoAnalyticsDashboard() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-4 sm:gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+          <div className="grid gap-4 sm:gap-6 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
             {cameras.map((camera) => (
               <CameraFeed
                 key={camera.id}
@@ -129,6 +130,7 @@ export default function VideoAnalyticsDashboard() {
                 onStartContinuousAnalysis={() => startContinuousAnalysis(camera.id)}
                 onStopContinuousAnalysis={() => stopContinuousAnalysis(camera.id)}
                 onVideoRef={(element) => setVideoRef(camera.id, element)}
+                onUpdateCameraConfig={updateCameraConfig} // Pass the new handler
               />
             ))}
           </div>
