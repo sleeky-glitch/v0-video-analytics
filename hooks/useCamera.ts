@@ -74,18 +74,24 @@ export function useCamera() {
 
         const formData = new FormData()
         formData.append("image", blob)
-        formData.append("model_type", camera.modelType) // Send selected model type
+        formData.append("model_type", camera.modelType)
 
-        if (camera.modelType === "person_detection_in_area" && camera.designatedArea?.points?.length) {
-          // Send designated area if applicable for the model
-          formData.append("designated_area", JSON.stringify(camera.designatedArea.points))
+        if (camera.modelType === "person_detection_in_area") {
+          // Always send designated_area if this model is selected.
+          // If no points, send an empty array.
+          const points = camera.designatedArea?.points || []
+          const pointsAsArrays = points.map((p) => [p.x, p.y])
+          formData.append("designated_area", JSON.stringify(pointsAsArrays))
+          console.log("DEBUG: Sending designated_area as:", JSON.stringify(pointsAsArrays))
         }
 
         try {
-          const apiUrl = "https://192.168.100.131:5000/detect" // Your backend URL
+          const apiUrl = "https://192.168.100.131:5000/detect"
           console.log(
             `[Camera ${cameraId}] Sending image to API. Model: ${camera.modelType}`,
-            camera.modelType === "person_detection_in_area" ? camera.designatedArea : "",
+            camera.modelType === "person_detection_in_area"
+              ? `Area points: ${JSON.stringify(camera.designatedArea?.points?.map((p) => [p.x, p.y]))}`
+              : "",
           )
 
           const response = await fetch(apiUrl, { method: "POST", body: formData })
@@ -101,9 +107,9 @@ export function useCamera() {
 
           setCameraAnalysisResult(cameraId, {
             timestamp: Date.now(),
-            detections: result.detections, // Assuming backend might still send this
-            personInDesignatedArea: result.personInDesignatedArea, // Specific to the new model
-            modelUsed: camera.modelType, // Echo back model used
+            detections: result.detections,
+            personInDesignatedArea: result.personInDesignatedArea,
+            modelUsed: camera.modelType,
             frameWidth,
             frameHeight,
           })
@@ -130,7 +136,7 @@ export function useCamera() {
         setIsAnalyzingSingleFrame((prev) => ({ ...prev, [cameraId]: false }))
       }
     },
-    [cameras, isAnalyzingSingleFrame, setCameraAnalysisResult], // `cameras` is a dependency now
+    [cameras, isAnalyzingSingleFrame, setCameraAnalysisResult],
   )
 
   const startContinuousAnalysis = useCallback(
@@ -175,7 +181,6 @@ export function useCamera() {
         prevCameras.map((cam) => {
           if (cam.id === cameraId) {
             const updatedCam = { ...cam, ...newConfig }
-            // If model type changes away from area detection, clear the area
             if (
               newConfig.modelType &&
               newConfig.modelType !== "person_detection_in_area" &&
@@ -183,15 +188,13 @@ export function useCamera() {
             ) {
               updatedCam.designatedArea = undefined
             } else if (newConfig.modelType === "person_detection_in_area" && !updatedCam.designatedArea) {
-              updatedCam.designatedArea = { points: [] } // Initialize if switching to area detection
+              updatedCam.designatedArea = { points: [] }
             }
             return updatedCam
           }
           return cam
         }),
       )
-      // If continuous analysis was running, it might need to be restarted if model parameters changed significantly.
-      // For simplicity, we can stop it. User can restart.
       if (isContinuouslyAnalyzing[cameraId]) {
         stopContinuousAnalysis(cameraId)
       }
@@ -207,7 +210,6 @@ export function useCamera() {
       delete streamRefs.current[cameraId]
       delete videoRefs.current[cameraId]
       setCameras((prev) => prev.filter((camera) => camera.id !== cameraId))
-      // Clean up states
       setIsAnalyzingSingleFrame((prev) => ({ ...prev, [cameraId]: false }))
       setIsContinuouslyAnalyzing((prev) => ({ ...prev, [cameraId]: false }))
     },
