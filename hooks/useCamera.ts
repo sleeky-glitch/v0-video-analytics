@@ -66,14 +66,14 @@ export function useCamera() {
         const formData = new FormData()
         formData.append("image", blob)
 
-        let apiUrl = "https://192.168.100.142:5000/detect" // Default API
+        let apiUrl = "https://192.168.100.149:5000/detect" // Default API
         let useDefaultFormData = true
 
         if (camera.modelType === "fire_detection") {
-          apiUrl = "https://192.168.100.142:5000/detect_fire"
+          apiUrl = "https://192.168.100.149:5000/detect_fire"
           useDefaultFormData = false
         } else if (camera.modelType === "mask_detection") {
-          apiUrl = "https://192.168.100.142:5000/detect_mask"
+          apiUrl = "https://192.168.100.149:5000/detect_mask"
           useDefaultFormData = false
         }
 
